@@ -2,54 +2,34 @@ public with sharing class OpportunityLineitemTriggerHandler {
   public static void updateTotalSalesQuantityInAccount(
     List<OpportunityLineItem> opptyLineitems
   ) {
-    Map<Id, List<OpportunityLineItem>> mapOpptyOLI = new Map<Id, List<OpportunityLineItem>>();
+    Set<Id> oppsIdSet = new Set<Id>();
 
-    for (OpportunityLineItem oli : opptyLineitems) {
-      if (mapOpptyOLI.containsKey(oli.OpportunityId)) {
-        mapOpptyOLI.get(oli.OpportunityId).add(oli);
-      } else {
-        mapOpptyOLI.put(
-          oli.OpportunityId,
-          new List<OpportunityLineItem>{ oli }
-        );
-      }
+    for (OpportunityLineitem oli : opptyLineitems) {
+      oppsIdSet.add(oli.OpportunityId);
     }
 
-    Set<Id> accountIds = new Set<Id>();
-
-    for (Opportunity op : [
-      SELECT AccountId
-      FROM Opportunity
-      WHERE Id IN :mapOpptyOLI.keySet()
+    //Get OpportunityLineitems for all Accounts involved in transaction Summarized by Account Id
+    List<Account> accountsToUpdate = new List<Account>();
+    for (AggregateResult objAgr : [
+      SELECT Opportunity.AccountId account, SUM(TotalPrice) total
+      FROM OpportunityLineitem
+      WHERE OpportunityLineitem.OpportunityId IN :oppsIdSet
+      GROUP BY Opportunity.AccountId
     ]) {
-      accountIds.add(op.AccountId);
-    }
+      //Validate Data
 
-    List<Account> accountsToBeUpdated = new List<Account>();
-
-    for (Account acc : [
-      SELECT
-        Total_Sales_Quantity__c,
-        (SELECT Id FROM Opportunities WHERE Id IN :mapOpptyOLI.keySet())
-      FROM Account
-      WHERE Id IN :accountIds
-    ]) {
-      Decimal temp = acc.Total_Sales_Quantity__c;
-      for (Opportunity op : acc.Opportunities) {
-        for (OpportunityLineItem oli : mapOpptyOLI.get(op.Id)) {
-          temp += oli.TotalPrice;
-        }
-      }
-      accountsToBeUpdated.add(
-        new Account(Id = acc.Id, Total_Sales_Quantity__c = temp)
+      //Manipulate Data
+      system.debug('objAgr: ' + objAgr);
+      accountsToUpdate.add(
+        new Account(
+          Id = (String) objAgr.get('account'),
+          AnnualRevenue = (Decimal) objAgr.get('total')
+        )
       );
     }
+    //Update Data
+    system.debug(accountsToUpdate);
 
-    if (
-      !accountsToBeUpdated.isEmpty() &&
-      Schema.SObjectType.Account.IsUpdateable()
-    ) {
-      update accountsToBeUpdated;
-    }
+    update accountsToUpdate;
   }
 }
