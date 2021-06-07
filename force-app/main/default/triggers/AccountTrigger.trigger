@@ -6,10 +6,12 @@ trigger AccountTrigger on Account(
 ) {
   switch on Trigger.OperationType {
     when BEFORE_INSERT {
+      AccountTriggerHandler.updateAccountRating(Trigger.oldMap, Trigger.newMap);
     }
     when AFTER_INSERT {
     }
     when BEFORE_UPDATE {
+      AccountTriggerHandler.updateAccountRating(Trigger.oldMap, Trigger.newMap);
     }
     when AFTER_UPDATE {
     }
